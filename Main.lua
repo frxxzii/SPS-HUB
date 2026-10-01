@@ -22,6 +22,16 @@ local CONFIG = {
     HubVersion = "1.0.0",
 }
 
+-- Store hub settings
+local HUB_SETTINGS = {
+    Weapon = {
+        HitboxEnabled = false,
+        HitboxSize = 5,
+        HitboxTransparency = 0.3,
+        HitboxColor = Color3.fromRGB(218, 165, 32),
+    }
+}
+
 -- ============================================================================
 -- GUI LOADER
 -- ============================================================================
@@ -365,8 +375,68 @@ function GUI:createContentArea()
         })
         
         tab.ContentPage = contentPage
-        self:populateTabContent(contentPage, tab.Name)
+        
+        if tab.Name == "Weapon" then
+            self:populateWeaponTab(contentPage)
+        else
+            self:populateTabContent(contentPage, tab.Name)
+        end
     end
+end
+
+function GUI:populateWeaponTab(contentPage)
+    local title = createTextLabel(contentPage, {
+        Name = "Title",
+        Text = "Weapon Settings",
+        TextColor3 = DESIGN.Colors.Accent,
+        TextSize = 16,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Size = UDim2.new(1, 0, 0, 30),
+        Position = UDim2.new(0, 0, 0, 0),
+    })
+    
+    local description = createTextLabel(contentPage, {
+        Name = "Description",
+        Text = "Configure hitbox and weapon properties",
+        TextColor3 = DESIGN.Colors.TextMuted,
+        TextSize = 11,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextWrapped = true,
+        Size = UDim2.new(1, 0, 0, 30),
+        Position = UDim2.new(0, 0, 0, 32),
+    })
+    
+    -- Enable Hitbox Toggle
+    self:createToggleButton(contentPage, "Enable Hitboxes", 70, function(state)
+        HUB_SETTINGS.Weapon.HitboxEnabled = state
+        print("🎯 Hitboxes " .. (state and "enabled" or "disabled"))
+    end)
+    
+    -- Hitbox Size Slider
+    self:createSliderControl(contentPage, "Hitbox Size", 110, 1, 20, HUB_SETTINGS.Weapon.HitboxSize, function(value)
+        HUB_SETTINGS.Weapon.HitboxSize = value
+        print("📏 Hitbox size: " .. value)
+    end)
+    
+    -- Hitbox Transparency Slider
+    self:createSliderControl(contentPage, "Transparency", 160, 0, 1, HUB_SETTINGS.Weapon.HitboxTransparency, function(value)
+        HUB_SETTINGS.Weapon.HitboxTransparency = value
+        print("👁 Transparency: " .. math.floor(value * 100) .. "%")
+    end, 0.01)
+    
+    -- Hitbox Color Picker
+    self:createColorPickerButton(contentPage, "Hitbox Color", 210, function(color)
+        HUB_SETTINGS.Weapon.HitboxColor = color
+        print("🎨 Color changed")
+    end)
+    
+    -- Reset Button
+    self:createActionButton(contentPage, "Reset to Default", 270, function()
+        HUB_SETTINGS.Weapon.HitboxSize = 5
+        HUB_SETTINGS.Weapon.HitboxTransparency = 0.3
+        HUB_SETTINGS.Weapon.HitboxColor = Color3.fromRGB(218, 165, 32)
+        print("↻ Settings reset to default")
+    end, Color3.fromRGB(180, 50, 50))
 end
 
 function GUI:populateTabContent(contentPage, tabName)
@@ -396,7 +466,7 @@ function GUI:populateTabContent(contentPage, tabName)
     end
 end
 
-function GUI:createToggleButton(parent, buttonText, yPosition)
+function GUI:createToggleButton(parent, buttonText, yPosition, callback)
     local buttonContainer = createFrame(parent, {
         Name = "ToggleButton",
         BackgroundColor3 = DESIGN.Colors.SecondaryBG,
@@ -448,6 +518,221 @@ function GUI:createToggleButton(parent, buttonText, yPosition)
             else
                 tweenProperty(toggleSwitch, "BackgroundColor3", DESIGN.Colors.TextMuted, 0.2)
                 tweenProperty(toggleCircle, "Position", UDim2.new(0, 1, 0.5, -8), 0.2)
+            end
+            
+            if callback then
+                callback(isToggled)
+            end
+        end
+    end)
+    
+    buttonContainer.MouseEnter:Connect(function()
+        tweenProperty(buttonContainer, "BackgroundColor3", DESIGN.Colors.ButtonHover, 0.15)
+    end)
+    
+    buttonContainer.MouseLeave:Connect(function()
+        tweenProperty(buttonContainer, "BackgroundColor3", DESIGN.Colors.SecondaryBG, 0.15)
+    end)
+end
+
+function GUI:createSliderControl(parent, label, yPosition, minVal, maxVal, currentVal, callback, step)
+    step = step or 1
+    
+    local container = createFrame(parent, {
+        Name = "SliderControl",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 50),
+        Position = UDim2.new(0, 0, 0, yPosition),
+    })
+    
+    local labelText = createTextLabel(container, {
+        Name = "Label",
+        Text = label,
+        TextColor3 = DESIGN.Colors.Text,
+        TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Size = UDim2.new(0.7, 0, 0, 20),
+        Position = UDim2.new(0, 0, 0, 0),
+    })
+    
+    local valueText = createTextLabel(container, {
+        Name = "Value",
+        Text = math.floor(currentVal * 100) / 100,
+        TextColor3 = DESIGN.Colors.Accent,
+        TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Right,
+        Size = UDim2.new(0.3, 0, 0, 20),
+        Position = UDim2.new(0.7, 0, 0, 0),
+    })
+    
+    local sliderBG = createFrame(container, {
+        Name = "SliderBG",
+        BackgroundColor3 = DESIGN.Colors.SecondaryBG,
+        Size = UDim2.new(1, 0, 0, 6),
+        Position = UDim2.new(0, 0, 0, 25),
+    })
+    
+    createCorner(sliderBG, 3)
+    createStroke(sliderBG, DESIGN.Colors.Border, 1)
+    
+    local sliderFill = createFrame(sliderBG, {
+        Name = "Fill",
+        BackgroundColor3 = DESIGN.Colors.Accent,
+        Size = UDim2.new((currentVal - minVal) / (maxVal - minVal), 0, 1, 0),
+        Position = UDim2.new(0, 0, 0, 0),
+    })
+    
+    createCorner(sliderFill, 3)
+    
+    local sliderButton = createFrame(container, {
+        Name = "Button",
+        BackgroundColor3 = DESIGN.Colors.Accent,
+        Size = UDim2.new(0, 14, 0, 14),
+        Position = UDim2.new((currentVal - minVal) / (maxVal - minVal), -7, 0, 21),
+    })
+    
+    createCorner(sliderButton, 7)
+    
+    local isDragging = false
+    
+    sliderButton.InputBegan:Connect(function(input, gameProcessed)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            isDragging = true
+        end
+    end)
+    
+    sliderButton.InputEnded:Connect(function(input, gameProcessed)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            isDragging = false
+        end
+    end)
+    
+    sliderBG.InputBegan:Connect(function(input, gameProcessed)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            isDragging = true
+        end
+    end)
+    
+    sliderBG.InputEnded:Connect(function(input, gameProcessed)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            isDragging = false
+        end
+    end)
+    
+    game:GetService("UserInputService").InputChanged:Connect(function(input, gameProcessed)
+        if isDragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local mouse = game.Players.LocalPlayer:GetMouse()
+            local sliderAbsPos = sliderBG.AbsolutePosition.X
+            local sliderSize = sliderBG.AbsoluteSize.X
+            
+            local percentage = math.clamp((mouse.X - sliderAbsPos) / sliderSize, 0, 1)
+            local newValue = minVal + (percentage * (maxVal - minVal))
+            
+            newValue = math.floor(newValue / step) * step
+            
+            sliderFill.Size = UDim2.new(percentage, 0, 1, 0)
+            sliderButton.Position = UDim2.new(percentage, -7, 0, 21)
+            valueText.Text = math.floor(newValue * 100) / 100
+            
+            if callback then
+                callback(newValue)
+            end
+        end
+    end)
+end
+
+function GUI:createColorPickerButton(parent, label, yPosition, callback)
+    local buttonContainer = createFrame(parent, {
+        Name = "ColorPickerButton",
+        BackgroundColor3 = DESIGN.Colors.SecondaryBG,
+        Size = UDim2.new(1, 0, 0, 40),
+        Position = UDim2.new(0, 0, 0, yPosition),
+    })
+    
+    createCorner(buttonContainer, 6)
+    createStroke(buttonContainer, DESIGN.Colors.Border, 1)
+    
+    local labelText = createTextLabel(buttonContainer, {
+        Name = "Label",
+        Text = label,
+        TextColor3 = DESIGN.Colors.Text,
+        TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Size = UDim2.new(0.7, 0, 1, 0),
+        Position = UDim2.new(0, 10, 0, 0),
+    })
+    
+    local colorPreview = createFrame(buttonContainer, {
+        Name = "ColorPreview",
+        BackgroundColor3 = HUB_SETTINGS.Weapon.HitboxColor,
+        Size = UDim2.new(0, 30, 0, 30),
+        Position = UDim2.new(1, -40, 0.5, -15),
+    })
+    
+    createCorner(colorPreview, 5)
+    createStroke(colorPreview, DESIGN.Colors.Border, 1)
+    
+    buttonContainer.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            local colors = {
+                Color3.fromRGB(218, 165, 32),  -- Gold
+                Color3.fromRGB(255, 0, 0),    -- Red
+                Color3.fromRGB(0, 255, 0),    -- Green
+                Color3.fromRGB(0, 0, 255),    -- Blue
+                Color3.fromRGB(255, 255, 0),  -- Yellow
+                Color3.fromRGB(255, 165, 0),  -- Orange
+            }
+            
+            local randomColor = colors[math.random(1, #colors)]
+            colorPreview.BackgroundColor3 = randomColor
+            
+            if callback then
+                callback(randomColor)
+            end
+        end
+    end)
+    
+    buttonContainer.MouseEnter:Connect(function()
+        tweenProperty(buttonContainer, "BackgroundColor3", DESIGN.Colors.ButtonHover, 0.15)
+    end)
+    
+    buttonContainer.MouseLeave:Connect(function()
+        tweenProperty(buttonContainer, "BackgroundColor3", DESIGN.Colors.SecondaryBG, 0.15)
+    end)
+end
+
+function GUI:createActionButton(parent, label, yPosition, callback, accentColor)
+    accentColor = accentColor or DESIGN.Colors.Accent
+    
+    local buttonContainer = createFrame(parent, {
+        Name = "ActionButton",
+        BackgroundColor3 = DESIGN.Colors.SecondaryBG,
+        Size = UDim2.new(1, 0, 0, 40),
+        Position = UDim2.new(0, 0, 0, yPosition),
+    })
+    
+    createCorner(buttonContainer, 6)
+    createStroke(buttonContainer, accentColor, 1)
+    
+    local labelText = createTextLabel(buttonContainer, {
+        Name = "Label",
+        Text = label,
+        TextColor3 = accentColor,
+        TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        Size = UDim2.new(1, 0, 1, 0),
+    })
+    
+    buttonContainer.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            tweenProperty(buttonContainer, "BackgroundColor3", accentColor, 0.1)
+            wait(0.1)
+            tweenProperty(buttonContainer, "BackgroundColor3", DESIGN.Colors.SecondaryBG, 0.1)
+            
+            if callback then
+                callback()
             end
         end
     end)
