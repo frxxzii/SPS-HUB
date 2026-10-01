@@ -1,5 +1,6 @@
 --[[
     SPS-HUB Main Entry Point
+    Universal Roblox Admin Hub - Works in any game
     Load this in Xeno to initialize the hub
 ]]
 
@@ -18,8 +19,8 @@ print("🚀 SPS-HUB Initializing...")
 -- ============================================================================
 
 local CONFIG = {
-    ToggleKey = Enum.KeyCode.RightShift,  -- Press RightShift to toggle GUI
-    HubVersion = "1.0.0",
+    ToggleKey = Enum.KeyCode.RightShift,
+    HubVersion = "1.0.1",
 }
 
 -- Store hub settings
@@ -32,12 +33,140 @@ local HUB_SETTINGS = {
     }
 }
 
+-- Track active hitboxes
+local ACTIVE_HITBOXES = {}
+
+-- ============================================================================
+-- UNIVERSAL UTILITIES
+-- ============================================================================
+
+local function getPlayerCharacter()
+    local player = game.Players.LocalPlayer
+    if player and player.Character then
+        return player.Character
+    end
+    return nil
+end
+
+local function getPlayers()
+    return game.Players:GetPlayers()
+end
+
+local function findCharacterByPlayer(player)
+    if player and player.Character then
+        return player.Character
+    end
+    return nil
+end
+
+local function getHumanoid(character)
+    if character then
+        return character:FindFirstChild("Humanoid")
+    end
+    return nil
+end
+
+local function getRootPart(character)
+    if character then
+        return character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart
+    end
+    return nil
+end
+
+-- ============================================================================
+-- HITBOX SYSTEM (UNIVERSAL)
+-- ============================================================================
+
+local HitboxSystem = {}
+
+function HitboxSystem:createHitbox(parent)
+    if not parent then return nil end
+    
+    local hitbox = Instance.new("Part")
+    hitbox.Name = "SPS_Hitbox"
+    hitbox.Shape = Enum.PartType.Ball
+    hitbox.Material = Enum.Material.Neon
+    hitbox.CanCollide = false
+    hitbox.CFrame = parent.CFrame
+    hitbox.Size = Vector3.new(HUB_SETTINGS.Weapon.HitboxSize, HUB_SETTINGS.Weapon.HitboxSize, HUB_SETTINGS.Weapon.HitboxSize)
+    hitbox.Color = HUB_SETTINGS.Weapon.HitboxColor
+    hitbox.Transparency = HUB_SETTINGS.Weapon.HitboxTransparency
+    hitbox.TopSurface = Enum.SurfaceType.Smooth
+    hitbox.BottomSurface = Enum.SurfaceType.Smooth
+    hitbox.Parent = parent
+    
+    -- Weld to parent if parent has humanoid root part
+    if parent:FindFirstChild("HumanoidRootPart") then
+        local weld = Instance.new("WeldConstraint")
+        weld.Part0 = parent:FindFirstChild("HumanoidRootPart")
+        weld.Part1 = hitbox
+        weld.Parent = hitbox
+    end
+    
+    return hitbox
+end
+
+function HitboxSystem:updateHitbox(hitbox)
+    if hitbox and hitbox.Parent then
+        hitbox.Size = Vector3.new(HUB_SETTINGS.Weapon.HitboxSize, HUB_SETTINGS.Weapon.HitboxSize, HUB_SETTINGS.Weapon.HitboxSize)
+        hitbox.Color = HUB_SETTINGS.Weapon.HitboxColor
+        hitbox.Transparency = HUB_SETTINGS.Weapon.HitboxTransparency
+    end
+end
+
+function HitboxSystem:removeHitbox(hitbox)
+    if hitbox and hitbox.Parent then
+        hitbox:Destroy()
+    end
+end
+
+function HitboxSystem:toggleAllHitboxes(enable)
+    if enable then
+        local players = getPlayers()
+        for _, player in ipairs(players) do
+            local character = findCharacterByPlayer(player)
+            if character and not ACTIVE_HITBOXES[player] then
+                local hitbox = self:createHitbox(character)
+                if hitbox then
+                    ACTIVE_HITBOXES[player] = hitbox
+                end
+            end
+        end
+    else
+        for player, hitbox in pairs(ACTIVE_HITBOXES) do
+            self:removeHitbox(hitbox)
+        end
+        ACTIVE_HITBOXES = {}
+    end
+end
+
+-- Monitor new players joining
+game.Players.PlayerAdded:Connect(function(player)
+    if HUB_SETTINGS.Weapon.HitboxEnabled then
+        player.CharacterAdded:Connect(function(character)
+            wait(0.1)
+            local hitbox = HitboxSystem:createHitbox(character)
+            if hitbox then
+                ACTIVE_HITBOXES[player] = hitbox
+            end
+        end)
+    end
+end)
+
+-- Remove hitbox when player leaves
+game.Players.PlayerRemoving:Connect(function(player)
+    if ACTIVE_HITBOXES[player] then
+        HitboxSystem:removeHitbox(ACTIVE_HITBOXES[player])
+        ACTIVE_HITBOXES[player] = nil
+    end
+end)
+
 -- ============================================================================
 -- GUI LOADER
 -- ============================================================================
 
 local GUI = {}
-GUI.Version = "1.0.0"
+GUI.Version = "1.0.1"
 
 -- Colors
 local DESIGN = {
@@ -378,6 +507,8 @@ function GUI:createContentArea()
         
         if tab.Name == "Weapon" then
             self:populateWeaponTab(contentPage)
+        elseif tab.Name == "Player" then
+            self:populatePlayerTab(contentPage)
         else
             self:populateTabContent(contentPage, tab.Name)
         end
@@ -409,24 +540,34 @@ function GUI:populateWeaponTab(contentPage)
     -- Enable Hitbox Toggle
     self:createToggleButton(contentPage, "Enable Hitboxes", 70, function(state)
         HUB_SETTINGS.Weapon.HitboxEnabled = state
+        HitboxSystem:toggleAllHitboxes(state)
         print("🎯 Hitboxes " .. (state and "enabled" or "disabled"))
     end)
     
     -- Hitbox Size Slider
     self:createSliderControl(contentPage, "Hitbox Size", 110, 1, 20, HUB_SETTINGS.Weapon.HitboxSize, function(value)
         HUB_SETTINGS.Weapon.HitboxSize = value
+        for _, hitbox in pairs(ACTIVE_HITBOXES) do
+            HitboxSystem:updateHitbox(hitbox)
+        end
         print("📏 Hitbox size: " .. value)
     end)
     
     -- Hitbox Transparency Slider
     self:createSliderControl(contentPage, "Transparency", 160, 0, 1, HUB_SETTINGS.Weapon.HitboxTransparency, function(value)
         HUB_SETTINGS.Weapon.HitboxTransparency = value
+        for _, hitbox in pairs(ACTIVE_HITBOXES) do
+            HitboxSystem:updateHitbox(hitbox)
+        end
         print("👁 Transparency: " .. math.floor(value * 100) .. "%")
     end, 0.01)
     
     -- Hitbox Color Picker
     self:createColorPickerButton(contentPage, "Hitbox Color", 210, function(color)
         HUB_SETTINGS.Weapon.HitboxColor = color
+        for _, hitbox in pairs(ACTIVE_HITBOXES) do
+            HitboxSystem:updateHitbox(hitbox)
+        end
         print("🎨 Color changed")
     end)
     
@@ -435,8 +576,49 @@ function GUI:populateWeaponTab(contentPage)
         HUB_SETTINGS.Weapon.HitboxSize = 5
         HUB_SETTINGS.Weapon.HitboxTransparency = 0.3
         HUB_SETTINGS.Weapon.HitboxColor = Color3.fromRGB(218, 165, 32)
+        for _, hitbox in pairs(ACTIVE_HITBOXES) do
+            HitboxSystem:updateHitbox(hitbox)
+        end
         print("↻ Settings reset to default")
     end, Color3.fromRGB(180, 50, 50))
+end
+
+function GUI:populatePlayerTab(contentPage)
+    local title = createTextLabel(contentPage, {
+        Name = "Title",
+        Text = "Player Info",
+        TextColor3 = DESIGN.Colors.Accent,
+        TextSize = 16,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Size = UDim2.new(1, 0, 0, 30),
+        Position = UDim2.new(0, 0, 0, 0),
+    })
+    
+    local player = game.Players.LocalPlayer
+    local playerName = player.Name
+    local userId = tostring(player.UserId)
+    
+    local infoText = createTextLabel(contentPage, {
+        Name = "PlayerInfo",
+        Text = "Player: " .. playerName .. "\nUserID: " .. userId .. "\nGame: " .. game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name,
+        TextColor3 = DESIGN.Colors.Text,
+        TextSize = 11,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextWrapped = true,
+        Size = UDim2.new(1, 0, 0, 80),
+        Position = UDim2.new(0, 0, 0, 35),
+    })
+    
+    -- Display online players
+    local onlineTitle = createTextLabel(contentPage, {
+        Name = "OnlineTitle",
+        Text = "Online Players: " .. #getPlayers(),
+        TextColor3 = DESIGN.Colors.Accent,
+        TextSize = 12,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Size = UDim2.new(1, 0, 0, 25),
+        Position = UDim2.new(0, 0, 0, 120),
+    })
 end
 
 function GUI:populateTabContent(contentPage, tabName)
@@ -452,7 +634,7 @@ function GUI:populateTabContent(contentPage, tabName)
     
     local description = createTextLabel(contentPage, {
         Name = "Description",
-        Text = "Configure " .. tabName .. " settings here",
+        Text = "Coming soon: " .. tabName .. " features",
         TextColor3 = DESIGN.Colors.TextMuted,
         TextSize = 12,
         TextXAlignment = Enum.TextXAlignment.Left,
@@ -676,12 +858,12 @@ function GUI:createColorPickerButton(parent, label, yPosition, callback)
         if gameProcessed then return end
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             local colors = {
-                Color3.fromRGB(218, 165, 32),  -- Gold
-                Color3.fromRGB(255, 0, 0),    -- Red
-                Color3.fromRGB(0, 255, 0),    -- Green
-                Color3.fromRGB(0, 0, 255),    -- Blue
-                Color3.fromRGB(255, 255, 0),  -- Yellow
-                Color3.fromRGB(255, 165, 0),  -- Orange
+                Color3.fromRGB(218, 165, 32),
+                Color3.fromRGB(255, 0, 0),
+                Color3.fromRGB(0, 255, 0),
+                Color3.fromRGB(0, 0, 255),
+                Color3.fromRGB(255, 255, 0),
+                Color3.fromRGB(255, 165, 0),
             }
             
             local randomColor = colors[math.random(1, #colors)]
@@ -805,3 +987,4 @@ print("📍 Version: " .. CONFIG.HubVersion)
 print("📍 Status: Loaded in Xeno")
 print("📍 Toggle Key: RightShift")
 print("═══════════════════════════════════════")
+print("✓ Universal mode: Works in ANY Roblox game")
